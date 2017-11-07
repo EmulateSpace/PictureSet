@@ -725,12 +725,14 @@ mechanisms used in real-address, virtual-8086 mod.
     segment or gate descriptor in the LDT. When clear, it indicates that
     the index refers to a descriptor in the current GDT.
 
+    ```
 
     31_____________________________________3___2___1___0
     |             |                        | T | I | E |
     |  Reserved   | Segment selector index | I | D | X |
     |_____________|________________________|___|_T_|_T_|
 
+    ```
 
   The Segment selector index field provides an index into the IDT, GDT, or
   current LDT to the segment or gate selector being referenced by the error
