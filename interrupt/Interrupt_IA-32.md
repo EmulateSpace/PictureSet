@@ -233,16 +233,16 @@ mechanisms used in real-address, virtual-8086 mod.
 
   **Note**
 
-  One exception subset normally reported as a fault is not restartable. Such
-  exceptions result in loss of some processor state. For example, executing
-  a POPAD instruction where the stack frame crosses over the end of the 
-  stack segment causes a fault to be reported. In this situation, the 
-  exception handler sees that the instruction pointer (CS:EIP) has been
-  restored as if the POPAD instruction had not been executed. However,
-  internal processor state (the general-purpose registers) will have been
-  modified. Such cases are considered programming errors. An application
-  causing this class of exceptions should be terminated by the operating 
-  system.
+    One exception subset normally reported as a fault is not restartable. Such
+    exceptions result in loss of some processor state. For example, executing
+    a POPAD instruction where the stack frame crosses over the end of the 
+    stack segment causes a fault to be reported. In this situation, the 
+    exception handler sees that the instruction pointer (CS:EIP) has been
+    restored as if the POPAD instruction had not been executed. However,
+    internal processor state (the general-purpose registers) will have been
+    modified. Such cases are considered programming errors. An application
+    causing this class of exceptions should be terminated by the operating 
+    system.
 
 ### 6. Program or Task restart
 
