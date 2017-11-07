@@ -32,6 +32,10 @@ mechanisms used in real-address, virtual-8086 mod.
 
   12. Exception and Interrupt Handling
 
+  13. ERROR Code
+
+  14. Exception and Interrupt Reference
+
 ### 1. Interrupt and Exception overview
 
   Interrupts and exceptions are event that indicate that a condition
@@ -574,18 +578,187 @@ mechanisms used in real-address, virtual-8086 mod.
 
   ![IDT_IDT_HANDLE_R](https://github.com/EmulateSpace/PictureSet/blob/master/interrupt/interrupt_handle_R.png)
 
+  To return from an exception- or interrupt-handler procedure, the handbler
+  must use the IRET (or IRETD) instruction. The IRET instruction is similar
+  to the RET instruction except that is restores the saved flags into the 
+  EFLAGS register. The IOPL field of the EFLAGS register is restored only
+  if the CPL is 0. The IF flag is changed only if the CPL is less than or 
+  equal to the IOPL.
+
+  If a stack switch occurred when calling the handler procedure, the IRET
+  instruct switches back to the interrupt procedure's stack on the return.
+
+##### 12.1.1 Protection of Exception- and Interrupt-Handler Procedures
+
+  The privilege-level protection for excepton- and interrupt-hanbler procedures
+  is similar to that used for ordinary procedure calls when through a call
+  gate. The processor does not permit transfer of execution to an exception-
+  or interrupt-handler procedure in a less privileged code segment (numerically
+  greater privilege level) than the CPL.
+
+  An attempt to violate this rule results in a general-protection exception (
+  #GP). The protection mechanism for exception- and interrupt-handler
+  procedures is different in the follow ways:
+
+  * Because interrupt and exception vectors have no RPL, the RPL is not check
+    on implicit calls to exception and interrupt handlers.
+
+  * The processor checks the DPL of the interrupt or gate only if an exception
+    or interrupt is generated with an INT n, INT 3, or INTO instruction.
+    Here, the CPL must be less then or equal to the DPL of the gate. This
+    restriction prevents application programs or procedures running at 
+    privilege level 3 from using a software interrupt to access critical 
+    exception handlers, such as the page-fault handler, providing that those
+    handlers are placed in more privileged code segment (numerically lower
+    privilege level). For hardware-generated interrupts and processor-detected
+    exceptions, the processor ignores the DPL of interrupt and trap gates.
+
+  Because exceptions and interrupts generally do not occur at predictable
+  times, these privilege rules effectively impose restrictions on the 
+  privilege levels at which exception and interrupt-handler procedures can
+  run. Either of the following techniques can be used to avoid privilege-level
+  violations.
+
+  * The exception or interrupt handler can be placed in a conforming code
+    segment. This technique can be used for handlers that only need to access
+    data available on the stack (for example, divide error exceptions). If
+    the handler needs data from a data segment, the data segment needs to 
+    be accessible from privilege level 3, which would make it unprotected.
+
+  * The handler can be placed in a nonconforming code segment with privilege
+    level 0. This handler would always run, regardless of the CPL that the
+    interrupted program or task is running at.
+
+##### 12.1.2 Flag Usage By Exception- or Interrupt-handler Procedure
+
+  When accessing an excepiton or interrupt handler through eigther and 
+  interrupt gate or trap, the processor clear the TF flag in the EFLAGS
+  register after it saves the contents of the FFLAGS register on the stack.(
+  On calls to exception and interrupt handlers, the processor also clear
+  the VM, RF, and NT flags in the EFLAGS register, after they are saved on
+  the stack.) Clearning the TF flag prevents instruction tracing from affecting
+  interrupt reponse. A subsequent IRET instruction restores the TF (and VM, RF,
+  and NT) flag to the values in the saved contents of the EFLAGS register
+  on the stack.
+
+  The only different between an interrupt gate and a trap gate is the way the 
+  processor handler the IF flag in the EFLAGS register. When accessing an 
+  exception- or interrupt-handling procedure through an interrupt gate, the
+  processor clears the IF flag to prevent other interrupts from interfering
+  with the current interrupt handler. A subsequent IRET isntruction restores
+  the IF flag to its value in the saved contents of the EFLAGS register on
+  the stack. Accessing a handler procedure through a trap gate does not affect
+  the IF flag.
+
+#### 12.2 Interrupt Tasks
+
+  When an exception or interrupt handler is accessed through a task gate in
+  the IDT, as task switch results. Handing an exception or interrupt with
+  a separate task offers several advantages:
+
+  * The entire context of the interrupted program or task is saved 
+    automatically.
+
+  * A new TSS permits the handler to use a new privilege level 0 stack when
+    handling the exception or interrupt. If an exception or interrupt 
+    occurs when the current privilege level 0 stack is corrupted, accessing
+    the handler through a task gate can prevent a system crash by providing
+    the handler with a new privilege level 0 stack.
+
+  * The handler can be further isolated from other task's by giving it a
+    separate address space. This is done by giving it a separate LDT.
+
+  The disadvantage of handling an interrupt with a separate task is that
+  the amount of machine state that must be saved on a task switch makes
+  it slower that unsing an interrupt gate, resulting in increased interrupt
+  latency.
+
+  A task gate in the IDT references a TSS descriptor in the GDT. A switch to 
+  the handler task is handled in the same manner as an ordinary task switch.
+  The link back to the interrupted task is stored in the previous task link
+  feild of the handler task's TSS. If an exception caused an error code to be
+  generated, this error code is copied to the stack of the new task.
+
+  When exception- or interrupt-hander tasks are used in an operation system,
+  there are actually two machanisms that can be used to dispatch tasks: the 
+  software scheduler (part of the operation system) and the hardware scheduler(
+  part of the processor's interrupt machanism. The software scheduler needs
+  to accommodate interrupt tasks that may be dispatched when interrupts
+  are enable.
+
+  **NOTE**
+
+    Because IA-32 architecture tasks are not re-entrant, an interrupt-handler
+    task must disable interrupt between the time it completes handling the 
+    interrupt and the time it executes the IRET instruction. This action
+    prevents another interrupt from occurring while the interrupt task's TSS
+    is still marked busy, which would cause a general-protection (#GP)
+    exception.
+
+  ![IDT_IDT_TASK](https://github.com/EmulateSpace/PictureSet/blob/master/interrupt/interrupt_task.png)
+
+#### 13. ERROR CODE
+
+  When an exception condition is related to a specific segment selector or IDT
+  vector, the processor pushs an error code onto the stack of the exception 
+  handler (whether it is a precedure or task). The error code has the format
+  `Figure6`. The error code resembles a segment selector. However, instead of 
+  a TI flag and RPL field, the error code contains 3 flags:
+
+  * EXT
+
+    External event (bit 0) - When set, indicates that the exception occurred
+    during delivery of an event external to the program, such as an interrupt
+    or earlier exception.
+
+  * IDT
+
+    Descriptor location (bit 1) - When set, indicates that the index portion
+    of the error code refers to a gate descriptor in the IDT. When clear,
+    indicates that the index refers to a descriptor in the GDT or the current
+    LDT.
+
+  * TI
+
+    GDT/LDT (bit 2) - Only used when the IDT flag is clear. When set, the TI
+    flag indicates that the index portion of the error code refers to a 
+    segment or gate descriptor in the LDT. When clear, it indicates that
+    the index refers to a descriptor in the current GDT.
 
 
+    31_____________________________________3___2___1___0
+    |             |                        | T | I | E |
+    |  Reserved   | Segment selector index | I | D | X |
+    |_____________|________________________|___|_T_|_T_|
 
 
+  The Segment selector index field provides an index into the IDT, GDT, or
+  current LDT to the segment or gate selector being referenced by the error
+  code. In some cases the error code is null (all bits are clear execpt 
+  possibly EXT). A null error code indicates that the error code was not caused
+  by a reference to a specific segment or that a null segment selector was
+  referenced in an operation.
 
+  The format of the error code is different for page-fault exception (#PF).
+  
+  The error code is pushed on the stack as a doubleword or word (depending on
+  the default interrupt, trap, or task gate size). To keep the stack aligned
+  for doubleword pushes, the upper half of the error code is reserved. Note
+  that the error code is not popped when the IRET instruction is executed to
+  return from an exception handler, so the handler must remove the error code
+  before execution a return.
 
+  Error codes are not pushed on the stack for exceptions that are generated 
+  externally (with the INTR or LINT[1:0] pins) or the INT n instruction, 
+  even if an error code is normally produced for those exception.
 
+### 14. Exception and Interrupt Reference
+ 
+  The following section describe condition which generate exception and 
+  interrupts. They are arraned in the order of vector number.
 
+  * interrupt 0 - Divide Error Exception (#DE)
 
-
-
-
-
-
+    see idt_0.c
+  
 
